@@ -24,7 +24,7 @@ def get_symbol_from_pair(pair: str) -> str:
     return pair.split('/')[0]
 
 
-class DNSAlarmWeek(IStrategy):
+class DNSAlarmDay(IStrategy):
     minimal_roi = {
         "0": 10
     }
@@ -33,7 +33,7 @@ class DNSAlarmWeek(IStrategy):
     stoploss = -0.99
 
     # Optimal timeframe for the strategy
-    timeframe = '1w'
+    timeframe = '1d'
 
     # -------
     # ALARM |
@@ -104,7 +104,7 @@ class DNSAlarmWeek(IStrategy):
                         binance_pair = pair.replace("/", "_")
                         # beep(6)
                         beep(3)
-                        tv_url = f'https://www.tradingview.com/chart/?symbol=binance:{tv_pair}&interval=1W'
+                        tv_url = f'https://www.tradingview.com/chart/?symbol=binance:{tv_pair}&interval=1D'
                         # os.system(f'xdg-open https://www.binance.com/en/trade/{binance_pair}?layout=pro&type=spot')
                         # os.system(f'firefox https://www.tradingview.com/chart/?symbol=binance:{tv_pair}')
                         print(green(f'{tv_pair} {green_line_price} {round(distance_percentage, 2)} {tv_url}'))
