@@ -1,6 +1,6 @@
 {
-    "btc_eth_alert_percentage": 0.2,
-    "altcoins_alert_percentage": 0.2,
+    "btc_eth_alert_percentage": 0.7,
+    "altcoins_alert_percentage": 0.7,
     "btc_eth_restart_alert_percentage": 1,
     "altcoins_restart_alert_percentage": 1,
 
@@ -60,25 +60,8 @@
     },
     "pairlists": [
         {
-            "method": "VolumePairList",
-            "number_assets": 50,
-            "sort_key": "quoteVolume",
-            "refresh_period": 1800
-        },
-        {"method": "AgeFilter", "min_days_listed": 10},
-        {"method": "PriceFilter", "low_price_ratio": 0.001},
-        {"method": "SpreadFilter", "max_spread_ratio": 0.005},
-        {
-            "method": "RangeStabilityFilter",
-            "lookback_days": 3,
-            "min_rate_of_change": 0.1,
-            "refresh_period": 1440
-        },
-        {
-            "method": "VolumePairList",
-            "number_assets": 25,
-            "sort_key": "quoteVolume"
-        }
+            "method": "StaticPairList"
+        }   
     ],
     "exchange": {
         "name": "binance",
@@ -89,8 +72,8 @@
             "enableRateLimit": true,
             "rateLimit": 200
         },
-        "pair_whitelist": [],
-        "pair_blacklist": [".*UP/USDT", ".*DOWN/USDT",  "BUSD/USDT", "USDC/USDT",  "EUR/USDT"]
+        "pair_whitelist": ["BTC/USDT"],
+        "pair_blacklist": []
     },
     "max_open_trades": 0,
     "edge": {

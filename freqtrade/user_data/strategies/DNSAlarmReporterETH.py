@@ -33,7 +33,7 @@ def red(text):
     return f"{Fore.RED}{text}{Style.RESET_ALL}"
 
 
-class DNSAlarmReporter(IStrategy):
+class DNSAlarmReporterETH(IStrategy):
     minimal_roi = {
         "0": 10
     }
@@ -66,11 +66,11 @@ class DNSAlarmReporter(IStrategy):
         super().__init__(config)
 
     def informative_pairs(self):
-        return [("BTC/USDT", "15m"),
-                ("BTC/USDT", "2h"),
-                ("BTC/USDT", "4h"),
-                ("BTC/USDT", "1d"),
-                ("BTC/USDT", "1w"),
+        return [# ("ETH/USDT", "15m"),
+                ("ETH/USDT", "2h"),
+                ("ETH/USDT", "4h"),
+                ("ETH/USDT", "1d"),
+                ("ETH/USDT", "1w"),
                 ]
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -81,20 +81,20 @@ class DNSAlarmReporter(IStrategy):
 
         if self.dp and \
                 self.dp.runmode.value in ('live', 'dry_run'):
-            self.df_15m = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="15m")
-            self.df_2h = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="2h")
-            self.df_4h = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="4h")
+            # self.df_15m = self.dp.get_pair_dataframe(pair="ETH/USDT", timeframe="15m")
+            self.df_2h = self.dp.get_pair_dataframe(pair="ETH/USDT", timeframe="2h")
+            self.df_4h = self.dp.get_pair_dataframe(pair="ETH/USDT", timeframe="4h")
             if self.df_1d is None:
-                self.df_1d = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="1d")
+                self.df_1d = self.dp.get_pair_dataframe(pair="ETH/USDT", timeframe="1d")
             if self.df_1w is None:
-                self.df_1w = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="1w")
+                self.df_1w = self.dp.get_pair_dataframe(pair="ETH/USDT", timeframe="1w")
 
-        df_45m = resample_to_interval(self.df_15m, 45)
+        # df_45m = resample_to_interval(self.df_15m, 45)
 
         ticker = self.dp.ticker(pair)
-        self.calculate_dns(self.df_15m, ticker, pair, "15m")
+        # self.calculate_dns(self.df_15m, ticker, pair, "15m")
         self.calculate_dns(df_30m, ticker, pair, "30m")
-        self.calculate_dns(df_45m, ticker, pair, "45m")
+        # self.calculate_dns(df_45m, ticker, pair, "45m")
         self.calculate_dns(df_1h, ticker, pair, "1h")
         self.calculate_dns(self.df_2h, ticker, pair, "2h")
         self.calculate_dns(self.df_4h, ticker, pair, "4h")
@@ -164,10 +164,6 @@ class DNSAlarmReporter(IStrategy):
                         result = v
             return result
 
-        # closest_demand_green_line = get_closest_and_smaller(ongoing_close, green_line_list)
-        # closest_demand_red_line = get_closest_and_smaller(ongoing_close, red_line_list)
-        # closest_offer_green_line = get_closest_and_greater(ongoing_close, green_line_list)
-        # closest_offer_red_line = get_closest_and_greater(ongoing_close, red_line_list)
         closest_demand_green_line = get_closest_and_smaller(ongoing_close, bull_engulf_green_line_list)
         closest_demand_red_line = get_closest_and_smaller(ongoing_close, bull_engulf_red_line_list)
         closest_offer_green_line = get_closest_and_greater(ongoing_close, bear_engulf_green_line_list)
@@ -210,13 +206,14 @@ class DNSAlarmReporter(IStrategy):
                         result = True
             return result
 
-        desktop_notif_text = f'{timeframe} BUY: {distance_closest_demand_green_line} {distance_closest_demand_red_line} ' \
+        desktop_notif_text = f'{pair} {timeframe} BUY: {distance_closest_demand_green_line} {distance_closest_demand_red_line} ' \
                f'SELL: {distance_closest_offer_green_line} {distance_closest_offer_red_line}'
-        text = f'{timeframe} BUY: {green(distance_closest_demand_green_line)} {red(distance_closest_demand_red_line)} ' \
+        text = f'{pair} {timeframe} BUY: {green(distance_closest_demand_green_line)} {red(distance_closest_demand_red_line)} ' \
                f'SELL: {green(distance_closest_offer_green_line)} {red(distance_closest_offer_red_line)}'
         if any_under_threshold(pair, distance_closest_demand_green_line, distance_closest_demand_red_line):
             
-            if os.getenv("beep") == "beep" and timeframe not in ["15m", "30m", "45m"]:
+            # if os.getenv("beep") == "beep" and timeframe not in ["15m", "30m", "45m"]:
+            if os.getenv("beep") == "beep":
                 # beep(3)
                 os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
                 
