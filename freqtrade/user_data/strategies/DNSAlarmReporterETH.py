@@ -213,12 +213,14 @@ class DNSAlarmReporterETH(IStrategy):
         if any_under_threshold(pair, distance_closest_demand_green_line, distance_closest_demand_red_line):
             
             # if os.getenv("beep") == "beep" and timeframe not in ["15m", "30m", "45m"]:
-            if os.getenv("beep") == "beep":
+            # if os.getenv("beep") == "beep":
                 # beep(3)
-                os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+                # os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
                 
             text += "    BUY    "
         if any_under_threshold(pair, distance_closest_offer_green_line, distance_closest_offer_red_line):
+            if os.getenv("beep") == "beep":
+                os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
             text += "    SELL    "
         print(text)
 

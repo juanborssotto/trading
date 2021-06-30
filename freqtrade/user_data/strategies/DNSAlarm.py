@@ -2,12 +2,17 @@
 from freqtrade.strategy.interface import IStrategy
 from pandas import DataFrame, Series
 from datetime import datetime, timedelta
-import os
 
 import numpy as np
 
-from freqtrade.rpc import RPCMessageType
-from beepy import beep
+from freqtrade.utils.tradingview import generate_tv_url
+from freqtrade.utils.binance_rest_api import get_ongoing_candle
+
+from typing import List
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_distance_percentage(current_price: float, green_line_price: float) -> float:
@@ -28,7 +33,7 @@ class DNSAlarm(IStrategy):
     stoploss = -0.99
 
     # Optimal timeframe for the strategy
-    timeframe = '1w'
+    timeframe = '1m'
 
     # -------
     # ALARM |
@@ -51,8 +56,7 @@ class DNSAlarm(IStrategy):
 
         if self.dp and \
                 self.dp.runmode.value in ('live', 'dry_run'):
-            pass
-            # short_df = short_df.append(self.get_ongoing_candle(pair), ignore_index=True)
+            short_df = short_df.append(get_ongoing_candle(pair=pair, timeframe=self.timeframe), ignore_index=True)
         elif self.dp.runmode.value.lower() in ["backtest", "plot"]:
             self.add_backtest_missing_candles(dataframe=short_df)
 
@@ -70,17 +74,22 @@ class DNSAlarm(IStrategy):
             short_df["bull_engulf_green_line"] = short_df["bull_engulf_green_line"].shift(-1)
             short_df["bear_engulf_green_line"] = short_df["bear_engulf_green_line"].shift(-1)
 
-
-        # ongoing_close = short_df['close'].iloc[-1]
-        ticker = self.dp.ticker(pair)
-        ongoing_close = ticker['last']
-
-
+        ongoing_close = short_df['close'].iloc[-1]
         bull_engulf_green_line_list = short_df["bull_engulf_green_line"].dropna().tail(
             self.max_simultaneous_engulf_patterns).tolist()
         bear_engulf_green_line_list = short_df["bear_engulf_green_line"].dropna().tail(
             self.max_simultaneous_engulf_patterns).tolist()
 
+        self.alarm_bull_green_lines(
+            pair=pair, ongoing_close=ongoing_close, bull_engulf_green_line_list=bear_engulf_green_line_list)
+
+        if self.dp.runmode.value in ('live', 'dry_run'):
+            return dataframe
+        return short_df
+
+    def alarm_bull_and_bear_green_lines(self, pair: str, ongoing_close: float,
+                                        bull_engulf_green_line_list: List[float],
+                                        bear_engulf_green_line_list: List[float]):
         green_line_list = bull_engulf_green_line_list + bear_engulf_green_line_list
         for green_line_price in green_line_list:
             alarm_emitted_key = f"{pair}-{green_line_price}"
@@ -92,37 +101,25 @@ class DNSAlarm(IStrategy):
                 if not self.alarm_emitted[alarm_emitted_key]:
                     self.alarm_emitted[alarm_emitted_key] = True
                     message = self.build_alert_message(pair=pair, green_line_price=green_line_price)
-
-                    # ONLY WHEN GREEN LINE IS BELOW
-                    if green_line_price < ongoing_close:
-                        tv_pair = pair.replace("/", "")
-                        binance_pair = pair.replace("/", "_")
-                        # beep(6)
-                        beep(3)
-                        os.system(f'xdg-open https://www.binance.com/en/trade/{binance_pair}?layout=pro&type=spot')
-                        os.system(f'firefox https://www.tradingview.com/chart/?symbol=binance:{tv_pair}')
-                        print(f'{tv_pair} {green_line_price} {distance_percentage}')
-
+                    # print(message)
             elif self.is_price_in_restart_alert_range(pair=pair, distance_percentage=distance_percentage):
                 self.alarm_emitted[alarm_emitted_key] = False
 
-        if self.dp.runmode.value in ('live', 'dry_run'):
-            return dataframe
-        return short_df
-
-    def get_ongoing_candle(self, pair: str) -> Series:
-        ticker = self.dp.ticker(pair)
-        ongoing_open = ticker['open']
-        ongoing_high = ticker['high']
-        ongoing_low = ticker['low']
-        ongoing_close = ticker['close']
-        return Series({
-            'volume': 0,  # 0 volume for the on-going candle, does not affect the alarm
-            'open': ongoing_open,
-            'high': ongoing_high,
-            'low': ongoing_low,
-            'close': ongoing_close
-        })
+    def alarm_bull_green_lines(self, pair: str, ongoing_close: float, bull_engulf_green_line_list: List[float]):
+        print(bull_engulf_green_line_list)
+        for green_line_price in bull_engulf_green_line_list:
+            # alarm_emitted_key = f"{pair}-{green_line_price}"
+            # if alarm_emitted_key not in self.alarm_emitted:
+            #     self.alarm_emitted[alarm_emitted_key] = False
+            distance_percentage = calculate_distance_percentage(
+                current_price=ongoing_close, green_line_price=green_line_price)
+            if self.is_price_in_alert_range(pair=pair, distance_percentage=distance_percentage):
+                # if not self.alarm_emitted[alarm_emitted_key]:
+                #     self.alarm_emitted[alarm_emitted_key] = True
+                message = self.build_alert_message(pair=pair, green_line_price=green_line_price)
+                # print(message)
+            # elif self.is_price_in_restart_alert_range(pair=pair, distance_percentage=distance_percentage):
+            #     self.alarm_emitted[alarm_emitted_key] = False
 
     def calculate_bull_engulf_green_line(self, previous_range: Series, dataframe: DataFrame) -> Series:
         open = dataframe["open"]
@@ -145,8 +142,7 @@ class DNSAlarm(IStrategy):
         return np.where(
             is_bull_engulf &
             (dataframe["min_low_to_end"] >= bull_engulf_low),
-            # open.shift(1),
-            bull_engulf_low,
+            open.shift(1),
             np.nan
         )
 
@@ -171,8 +167,7 @@ class DNSAlarm(IStrategy):
         return np.where(
             is_bear_engulf &
             (dataframe["max_high_to_end"] <= bear_engulf_high),
-            bear_engulf_high,
-            # open.shift(1),
+            open.shift(1),
             np.nan
         )
 
@@ -203,13 +198,21 @@ class DNSAlarm(IStrategy):
         return distance_percentage > self.altcoins_restart_alert_percentage
 
     def build_alert_message(self, pair: str, green_line_price: float) -> str:
+        tv_section = ""
+        # try:
+        #     tv_url = generate_tv_url(pair=pair, timeframe=self.timeframe)
+        #     tv_section = f"\nLink a TradingView: {tv_url}"
+        # except Exception as exception:
+        #     logger.exception(f"Exception in spring alarm: {exception}")
         if get_symbol_from_pair(pair).upper() in self.BTC_ETH:
             alert_percentage = self.btc_eth_alert_percentage
         else:
             alert_percentage = self.altcoins_alert_percentage
+        arg_date = (datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M')
         return f"{pair} se encuentra a menos de {round(alert_percentage, 2)}% " \
                f"de {round(green_line_price, 2)} con fecha " \
-               f"{(datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M')} ARG"
+               f"{arg_date} ARG" \
+               f"{tv_section}"
 
     def populate_buy_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
