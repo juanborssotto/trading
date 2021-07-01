@@ -15,6 +15,10 @@ from typing import List
 
 from colorama import Fore, Style
 
+from pandas import to_datetime
+
+from freqtrade.utils.binance_rest_api import get_candles, get_ongoing_candle
+
 
 def calculate_distance_percentage(current_price: float, green_line_price: float) -> float:
     distance = abs(current_price - green_line_price)
@@ -33,7 +37,14 @@ def red(text):
     return f"{Fore.RED}{text}{Style.RESET_ALL}"
 
 
-class DNSAlarmReporterBTC(IStrategy):
+def get_now_and_dataframe_hour_diff(dataframe):
+    last_candle_closed_date = dataframe["date"].iloc[-1].replace(tzinfo=None)
+    now = datetime.utcnow().replace(tzinfo=None)
+
+    return (now - last_candle_closed_date).total_seconds() / 3600
+
+
+class DNSAlarmReporter(IStrategy):
     minimal_roi = {
         "0": 10
     }
@@ -52,11 +63,7 @@ class DNSAlarmReporterBTC(IStrategy):
     max_simultaneous_engulf_patterns = 10
     BTC_ETH = ["BTC", "ETH"]
 
-    df_15m = None
-    df_2h = None
-    df_4h = None
-    df_1d = None
-    df_1w = None
+    df_dict = dict()
 
     def __init__(self, config: dict) -> None:
         self.btc_eth_alert_percentage = float(config['btc_eth_alert_percentage'])
@@ -65,46 +72,54 @@ class DNSAlarmReporterBTC(IStrategy):
         self.altcoins_restart_alert_percentage = float(config['altcoins_restart_alert_percentage'])
         super().__init__(config)
 
-    def informative_pairs(self):
-        return [# ("BTC/USDT", "15m"),
-                ("BTC/USDT", "2h"),
-                ("BTC/USDT", "4h"),
-                ("BTC/USDT", "1d"),
-                ("BTC/USDT", "1w"),
-                ]
-
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata["pair"]
-
         df_30m = dataframe
-        df_1h = resample_to_interval(df_30m, 60)
-
         if self.dp and \
                 self.dp.runmode.value in ('live', 'dry_run'):
-            # self.df_15m = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="15m")
-            self.df_2h = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="2h")
-            self.df_4h = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="4h")
-            if self.df_1d is None:
-                self.df_1d = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="1d")
-            if self.df_1w is None:
-                self.df_1w = self.dp.get_pair_dataframe(pair="BTC/USDT", timeframe="1w")
+            df_30m = df_30m.append(get_ongoing_candle(pair=pair, timeframe=self.timeframe), ignore_index=True)
+        df_1h = resample_to_interval(df_30m, 60)
 
-        # df_45m = resample_to_interval(self.df_15m, 45)
+        if pair not in self.df_dict:
+            self.df_dict[pair] = None
+            self.df_dict[f"{pair}2h"] = None
+            self.df_dict[f"{pair}4h"] = None
+            self.df_dict[f"{pair}1d"] = None
+            self.df_dict[f"{pair}1w"] = None
 
-        ticker = self.dp.ticker(pair)
+        df_2h = self.df_dict[f"{pair}2h"]
+        df_4h = self.df_dict[f"{pair}4h"]
+        df_1d = self.df_dict[f"{pair}1d"]
+        df_1w = self.df_dict[f"{pair}1w"]
+        if self.dp and \
+                self.dp.runmode.value in ('live', 'dry_run'):
+            if df_2h is None or get_now_and_dataframe_hour_diff(df_2h) > 2:
+                self.df_dict[f"{pair}2h"] = get_candles(pair=pair, timeframe="2h")
+                df_2h = self.df_dict[f"{pair}2h"]
+            if df_4h is None or get_now_and_dataframe_hour_diff(df_4h) > 4:
+                self.df_dict[f"{pair}4h"] = get_candles(pair=pair, timeframe="4h")
+                df_4h = self.df_dict[f"{pair}4h"]
+            if df_1d is None:
+                self.df_dict[f"{pair}1d"] = get_candles(pair=pair, timeframe="1d")
+                df_1d = self.df_dict[f"{pair}1d"]
+            if df_1w is None:
+                self.df_dict[f"{pair}1w"] = get_candles(pair=pair, timeframe="1w")
+                df_1w = self.df_dict[f"{pair}1w"]
+
+        ongoing_close = df_30m["close"].iloc[-1]
         # self.calculate_dns(self.df_15m, ticker, pair, "15m")
-        self.calculate_dns(df_30m, ticker, pair, "30m")
+        self.calculate_dns(df_30m, ongoing_close, pair, "30m")
         # self.calculate_dns(df_45m, ticker, pair, "45m")
-        self.calculate_dns(df_1h, ticker, pair, "1h")
-        self.calculate_dns(self.df_2h, ticker, pair, "2h")
-        self.calculate_dns(self.df_4h, ticker, pair, "4h")
-        self.calculate_dns(self.df_1d, ticker, pair, "1d")
-        self.calculate_dns(self.df_1w, ticker, pair, "1w")
+        self.calculate_dns(df_1h, ongoing_close, pair, "1h")
+        self.calculate_dns(df_2h, ongoing_close, pair, "2h")
+        self.calculate_dns(df_4h, ongoing_close, pair, "4h")
+        self.calculate_dns(df_1d, ongoing_close, pair, "1d")
+        self.calculate_dns(df_1w, ongoing_close, pair, "1w")
         print("")
 
         return dataframe
 
-    def calculate_dns(self, dataframe, ticker, pair, timeframe):
+    def calculate_dns(self, dataframe, ongoing_close, pair, timeframe):
         short_df = dataframe.tail(self.max_bars_back)
 
         # if self.dp and \
@@ -132,8 +147,6 @@ class DNSAlarmReporterBTC(IStrategy):
         #     # ---------------------------
         #     short_df["bull_engulf_green_line"] = short_df["bull_engulf_green_line"].shift(-1)
         #     short_df["bear_engulf_green_line"] = short_df["bear_engulf_green_line"].shift(-1)
-
-        ongoing_close = ticker['last']
 
         bull_engulf_green_line_list = short_df["bull_engulf_green_line"].dropna().tail(
             self.max_simultaneous_engulf_patterns).tolist()
@@ -164,10 +177,6 @@ class DNSAlarmReporterBTC(IStrategy):
                         result = v
             return result
 
-        # closest_demand_green_line = get_closest_and_smaller(ongoing_close, green_line_list)
-        # closest_demand_red_line = get_closest_and_smaller(ongoing_close, red_line_list)
-        # closest_offer_green_line = get_closest_and_greater(ongoing_close, green_line_list)
-        # closest_offer_red_line = get_closest_and_greater(ongoing_close, red_line_list)
         closest_demand_green_line = get_closest_and_smaller(ongoing_close, bull_engulf_green_line_list)
         closest_demand_red_line = get_closest_and_smaller(ongoing_close, bull_engulf_red_line_list)
         closest_offer_green_line = get_closest_and_greater(ongoing_close, bear_engulf_green_line_list)
@@ -217,15 +226,12 @@ class DNSAlarmReporterBTC(IStrategy):
         if any_under_threshold(pair, distance_closest_demand_green_line, distance_closest_demand_red_line):
             
             # if os.getenv("beep") == "beep" and timeframe not in ["15m", "30m", "45m"]:
-            # if os.getenv("beep") == "beep":
-                # beep(3)
-                # os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
-                
-            text += "    BUY    "
-        if any_under_threshold(pair, distance_closest_offer_green_line, distance_closest_offer_red_line):
             if os.getenv("beep") == "beep":
                 # beep(3)
                 os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+                
+            text += "    BUY    "
+        if any_under_threshold(pair, distance_closest_offer_green_line, distance_closest_offer_red_line):
             text += "    SELL    "
         print(text)
 
