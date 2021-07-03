@@ -1,4 +1,5 @@
 # Freqtrade rules
+freqtrade/buynstoplossconfigfilled.json
 .swp
 .out
 config*.json
