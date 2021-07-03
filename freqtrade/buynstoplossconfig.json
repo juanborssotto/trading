@@ -1,14 +1,12 @@
 {
-    "btc_eth_alert_percentage": 0.2,
-    "altcoins_alert_percentage": 0.2,
-    "btc_eth_restart_alert_percentage": 1,
-    "altcoins_restart_alert_percentage": 1,
+    "buy_zone_price_top": {buy_zone_price_top},
+    "buy_zone_price_bottom": {buy_zone_price_bottom},
 
-    "dry_run": true,
+    "dry_run": {is_dry_run},
     "dry_run_wallet": 1000,
     "stake_currency": "USDT",
     "tradable_balance_ratio": 0.99,
-    "stake_amount": "unlimited",
+    "stake_amount": {stake_amount},
 
     "amend_last_stake_amount": false,
     "last_stake_amount_min_ratio": 0.5,
@@ -27,7 +25,7 @@
     },
 
     "bid_strategy": {
-        "price_side": "bid",
+        "price_side": "ask",
         "use_order_book": false,
         "ask_last_balance": 0.0,
         "order_book_top": 1,
@@ -37,7 +35,7 @@
         }
     },
     "ask_strategy":{
-        "price_side": "ask",
+        "price_side": "bid",
         "use_order_book": false,
         "order_book_min": 1,
         "order_book_max": 1,
@@ -47,8 +45,8 @@
         "ignore_roi_if_buy_signal": false
     },
     "order_types": {
-        "buy": "limit",
-        "sell": "limit",
+        "buy": "market",
+        "sell": "market",
         "emergencysell": "market",
         "stoploss": "market",
         "stoploss_on_exchange": false,
@@ -60,39 +58,24 @@
     },
     "pairlists": [
         {
-            "method": "VolumePairList",
-            "number_assets": 50,
-            "sort_key": "quoteVolume",
-            "refresh_period": 1800
-        },
-        {"method": "AgeFilter", "min_days_listed": 10},
-        {"method": "PriceFilter", "low_price_ratio": 0.001},
-        {"method": "SpreadFilter", "max_spread_ratio": 0.005},
-        {
-            "method": "RangeStabilityFilter",
-            "lookback_days": 3,
-            "min_rate_of_change": 0.1,
-            "refresh_period": 1440
-        },
-        {
-            "method": "VolumePairList",
-            "number_assets": 25,
-            "sort_key": "quoteVolume"
-        }
+            "method": "StaticPairList"
+        }   
     ],
     "exchange": {
         "name": "binance",
-        "key": "",
-        "secret": "",
+        "key": "{binance_key}",
+        "secret": "{binance_secret}",
         "ccxt_config": {"enableRateLimit": true},
         "ccxt_async_config": {
             "enableRateLimit": true,
             "rateLimit": 200
         },
-        "pair_whitelist": [],
-        "pair_blacklist": [".*UP/USDT", ".*DOWN/USDT",  "BUSD/USDT", "USDC/USDT",  "EUR/USDT"]
+        "pair_whitelist": [
+            "{pair}"
+        ],
+        "pair_blacklist": []
     },
-    "max_open_trades": 0,
+    "max_open_trades": 1,
     "edge": {
         "enabled": false,
         "process_throttle_secs": 3600,
@@ -122,22 +105,22 @@
         }
     },
     "api_server": {
-        "enabled": false,
+        "enabled": true,
         "listen_ip_address": "127.0.0.1",
         "listen_port": 8080,
         "verbosity": "error",
         "enable_openapi": true,
         "jwt_secret_key": "",
         "CORS_origins": [],
-        "username": "nqnbot",
-        "password": "NQNb0t_!"
+        "username": "admin",
+        "password": "admin"
     },
     "bot_name": "nqnbot",
-    "db_url": "sqlite:///dnsalarm.sqlite",
+    "db_url": "sqlite:///buynstoploss.sqlite",
     "initial_state": "running",
     "forcebuy_enable": false,
     "internals": {
-        "process_throttle_secs": 10,
+        "process_throttle_secs": 1,
         "heartbeat_interval": 60
     },
     "disable_dataframe_checks": false,
