@@ -8,6 +8,7 @@ import talib.abstract as ta
 
 # --------------------------------
 
+# Profit formula 2220.0 + (2220.0 * 0.2 / 100.0) + (2220.0 * 0.043 / 100)
 
 class BuyNStoploss(IStrategy):
     minimal_roi = {
@@ -35,11 +36,11 @@ class BuyNStoploss(IStrategy):
 
         if self.notify_buy:
             msg = f"{pair} bought"
-            os.system(f"notify-send \"{msg}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+            os.system(f"notify-send \"{msg}\" --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
             self.notify_buy = False
         if self.notify_stop_loss:
             msg = f"{pair} stop loss run :("
-            os.system(f"notify-send \"{msg}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+            os.system(f"notify-send \"{msg}\" --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
             self.notify_stop_loss = False
 
         buy = False

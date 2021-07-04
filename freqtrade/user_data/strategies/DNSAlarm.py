@@ -8,7 +8,6 @@ import talib.abstract as ta
 
 import numpy as np
 
-
 from freqtrade.utils.tradingview import generate_tv_url
 from freqtrade.utils.binance_rest_api import get_ongoing_candle
 
@@ -17,6 +16,7 @@ from typing import List
 import logging
 
 import pandas as pd
+
 pd.options.mode.chained_assignment = None  # default='warn'
 
 from colorama import Fore, Style
@@ -43,6 +43,23 @@ def get_symbol_from_pair(pair: str) -> str:
 
 def green_text(text):
     return f"{Fore.GREEN}{text}{Style.RESET_ALL}"
+
+
+def yellow_text(text):
+    return f"{Fore.YELLOW}{text}{Style.RESET_ALL}"
+
+
+def get_cmd_pair(pair):
+    s = pair.split("/")
+    return s[0] + "\\/" + s[1]
+
+
+def in_range(ongoing_close, green, red, green_distance, red_distance):
+    if ongoing_close > green:
+        return calculate_distance_percentage(ongoing_close, green) <= green_distance and \
+               calculate_distance_percentage(ongoing_close, red) <= red_distance
+    return calculate_distance_percentage(ongoing_close, red) <= red_distance
+
 
 class DNSAlarm(IStrategy):
     minimal_roi = {
@@ -72,6 +89,8 @@ class DNSAlarm(IStrategy):
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata["pair"]
+        if pair not in self.alarm_emitted:
+            self.alarm_emitted[pair] = False
         short_df = dataframe.tail(self.max_bars_back)
 
         if self.dp and \
@@ -87,15 +106,27 @@ class DNSAlarm(IStrategy):
 
         ongoing_close = short_df["close"].iloc[-1]
         # print(f"g {green} r {red}")
-        if green and red and calculate_distance_percentage(ongoing_close, red) <= 2:
-            is_dry_run = "true"
-            stake_amount = 25
-            increment_pct = 1.1
-            cmd = f"export buy_zone_price_top={calculate_increment(red, increment_pct)} buy_zone_price_bottom={red} " \
-                                 f"pair={pair} is_dry_run={is_dry_run} stake_amount={stake_amount} && ./buynstoploss.sh"
-            print(green_text(cmd))
-            desktop_notif_text = f"{pair} DNS found"
-            os.system(f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+        green_distance = 0.3
+        red_distance = 1.3
+        if green and red and in_range(ongoing_close, green, red, green_distance, red_distance):
+            if not self.alarm_emitted[pair]:
+                self.alarm_emitted[pair] = True
+                is_dry_run = "false"
+                stake_amount = 25
+                increment_pct = 0.4
+                print(yellow_text(f"https://www.tradingview.com/chart/?symbol=binance:{pair.replace('/', '')}&interval=60"))
+                if calculate_distance_percentage(green, red) < increment_pct:
+                    cmd = f"export buy_zone_price_top={green} buy_zone_price_bottom={red} " \
+                          f"pair=\"{get_cmd_pair(pair)}\" is_dry_run={is_dry_run} stake_amount={stake_amount} && ./buynstoploss.sh"
+                else:
+                    cmd = f"export buy_zone_price_top={calculate_increment(red, increment_pct)} buy_zone_price_bottom={red} " \
+                          f"pair=\"{get_cmd_pair(pair)}\" is_dry_run={is_dry_run} stake_amount={stake_amount} && ./buynstoploss.sh"
+                print(green_text(cmd))
+                desktop_notif_text = f"{pair} DNS found"
+                os.system(
+                    f"notify-send \"{desktop_notif_text.upper()}\" -t 10000 -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+        else:
+            self.alarm_emitted[pair] = False
 
         return dataframe
 
