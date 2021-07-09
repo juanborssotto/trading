@@ -63,7 +63,7 @@ def in_range(ongoing_close, green, red, green_distance, red_distance):
     return calculate_distance_percentage(ongoing_close, red) <= red_distance
 
 
-class DNSAlarm(IStrategy):
+class RSIDropDNS(IStrategy):
     minimal_roi = {
         "0": 10
     }
@@ -79,20 +79,19 @@ class DNSAlarm(IStrategy):
     # -------
     alarm_emitted = dict()
     max_bars_back = 500
-    max_simultaneous_engulf_patterns = 10
-    BTC_ETH = ["BTC", "ETH"]
 
-    def __init__(self, config: dict) -> None:
-        self.btc_eth_alert_percentage = float(config['btc_eth_alert_percentage'])
-        self.altcoins_alert_percentage = float(config['altcoins_alert_percentage'])
-        self.btc_eth_restart_alert_percentage = float(config['btc_eth_restart_alert_percentage'])
-        self.altcoins_restart_alert_percentage = float(config['altcoins_restart_alert_percentage'])
-        self.count = 0
-        super().__init__(config)
+    #############################################################################
+    #############################################################################
+    #############################################################################
+    #############################################################################
+    process_only_new_candles = True
+    #############################################################################
+    #############################################################################
+    #############################################################################
+    #############################################################################
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata["pair"]
-
         if pair not in self.alarm_emitted:
             self.alarm_emitted[pair] = False
         short_df = dataframe.tail(self.max_bars_back)
@@ -103,7 +102,7 @@ class DNSAlarm(IStrategy):
 
         previous_range = short_df["open"].shift(1) - short_df["close"].shift(1)
 
-        rsi_limit = 15.0
+        rsi_limit = 11.0
         green, red = self.get_closest_bull_zone(previous_range=previous_range, dataframe=short_df, limit=rsi_limit)
 
         ongoing_close = short_df["close"].iloc[-1]
@@ -113,17 +112,29 @@ class DNSAlarm(IStrategy):
             red_distance = 1.3
             increment_pct = 0.5
             tv_interval = 60
+            drop_rsi_threshold = 30
         elif self.timeframe == "30m":
             green_distance = 0.3
             red_distance = 1.3
             increment_pct = 0.5
             tv_interval = 30
+            drop_rsi_threshold = 30
         elif self.timeframe == "5m":
             green_distance = 0.3
-            red_distance = 1
+            red_distance = 2
             increment_pct = 0.3
             tv_interval = 5
-        if green and red and in_range(ongoing_close, green, red, green_distance, red_distance):
+            drop_rsi_threshold = 25
+        elif self.timeframe == "1m":
+            green_distance = 0.3
+            red_distance = 2
+            increment_pct = 0.3
+            tv_interval = 1
+            drop_rsi_threshold = 30
+
+
+        if green and red and in_range(ongoing_close, green, red, green_distance, red_distance) and \
+                self.rsi_in_range(dataframe=dataframe, rsi_threshold=drop_rsi_threshold):
             if not self.alarm_emitted[pair]:
                 self.alarm_emitted[pair] = True
                 is_dry_run = "false"
@@ -188,31 +199,15 @@ class DNSAlarm(IStrategy):
         except Exception as e:
             return None, None
 
-    def add_backtest_missing_candles(self, dataframe: DataFrame):
-        from datetime import datetime
-        import pytz
-        utc = pytz.UTC
-
-        # ------------------------------------------------------------------
-        # this is only the append structure, remember to modify the values |
-        # ------------------------------------------------------------------
-        dataframe.append(
-            {"date": utc.localize(datetime(year=2021, month=5, day=31, minute=0, second=0, microsecond=0)),
-             "open": 0,
-             "high": 0,
-             "low": 0,
-             "close": 0,
-             "volume": 0}, ignore_index=True)
-
-    def is_price_in_alert_range(self, pair: str, distance_percentage: float) -> bool:
-        if get_symbol_from_pair(pair).upper() in self.BTC_ETH:
-            return distance_percentage < self.btc_eth_alert_percentage
-        return distance_percentage < self.altcoins_alert_percentage
-
-    def is_price_in_restart_alert_range(self, pair: str, distance_percentage: float) -> bool:
-        if get_symbol_from_pair(pair).upper() in self.BTC_ETH:
-            return distance_percentage > self.btc_eth_restart_alert_percentage
-        return distance_percentage > self.altcoins_restart_alert_percentage
+    def rsi_in_range(self, dataframe, rsi_threshold):
+        rsi = ta.RSI(dataframe, timeperiod=14).tolist()
+        lookback_candles = 12
+        last_rsi = rsi[-1]
+        result = False
+        for i in range(2, lookback_candles + 1):
+            if calculate_percentage_change(last_rsi, rsi[-i]) > rsi_threshold:
+                result = True
+        return result
 
     def populate_buy_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[

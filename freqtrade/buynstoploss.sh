@@ -38,5 +38,6 @@ arr=(${pair//"\/"/ })
 symbol="${arr[0]}";
 
 rm "${symbol}buynstoploss.sqlite"
-cp buynstoplossconfig.json buynstoplossconfigfilled.json && sed -i "s/{buy_zone_price_top}/$buy_zone_price_top/g; s/{buy_zone_price_bottom}/$buy_zone_price_bottom/g; s/{pair}/$pair/g; s/{symbol}/$symbol/g; s/{is_dry_run}/$is_dry_run/g; s/{stake_amount}/$stake_amount/g; s/{binance_key}/$binance_key/g; s/{binance_secret}/$binance_secret/g" buynstoplossconfigfilled.json && freqtrade trade -c buynstoplossconfigfilled.json --strategy BuyNStoploss
+# cp buynstoplossconfig.json buynstoplossconfigfilled.json && sed -i "s/{buy_zone_price_top}/$buy_zone_price_top/g; s/{buy_zone_price_bottom}/$buy_zone_price_bottom/g; s/{pair}/$pair/g; s/{symbol}/$symbol/g; s/{is_dry_run}/$is_dry_run/g; s/{stake_amount}/$stake_amount/g; s/{binance_key}/$binance_key/g; s/{binance_secret}/$binance_secret/g" buynstoplossconfigfilled.json && freqtrade trade -c buynstoplossconfigfilled.json --strategy BuyNStoploss
+cp buynstoplossconfig.json buynstoplossconfigfilled.json && sed -i "s/{buy_zone_price_top}/$buy_zone_price_top/g; s/{buy_zone_price_bottom}/$buy_zone_price_bottom/g; s/{pair}/$pair/g; s/{symbol}/$symbol/g; s/{is_dry_run}/$is_dry_run/g; s/{stake_amount}/$stake_amount/g; s/{binance_key}/$binance_key/g; s/{binance_secret}/$binance_secret/g" buynstoplossconfigfilled.json && freqtrade trade -c buynstoplossconfigfilled.json --strategy BuyNStoplossNProfit
 

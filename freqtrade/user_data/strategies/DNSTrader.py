@@ -3,6 +3,7 @@ import os
 from freqtrade.strategy.interface import IStrategy
 from pandas import DataFrame, Series
 from datetime import datetime, timedelta
+import talib.abstract as ta
 
 import numpy as np
 
@@ -21,13 +22,17 @@ def calculate_distance_percentage(current_price: float, green_line_price: float)
     return distance * 100 / current_price
 
 
+def calculate_percentage_change(start_value: float, final_value: float) -> float:
+    return (final_value - start_value) / start_value * 100
+
+
 def get_symbol_from_pair(pair: str) -> str:
     return pair.split('/')[0]
 
 
 class DNSTrader(IStrategy):
     minimal_roi = {
-        "0": 0.08
+        "0": 0.99
     }
 
     # Optimal stoploss designed for the strategy
@@ -98,7 +103,7 @@ class DNSTrader(IStrategy):
 
         return dataframe
 
-    def get_closest_bull_zone(self, previous_range: Series, dataframe: DataFrame):
+    def get_closest_bull_zone(self, previous_range: Series, dataframe, limit: float):
         open = dataframe["open"]
         low = dataframe["low"]
         close = dataframe["close"]
@@ -116,12 +121,22 @@ class DNSTrader(IStrategy):
             min_low_to_end.append(min(low_list[i:]))
         dataframe["min_low_to_end"] = min_low_to_end
 
+        rsi = ta.RSI(dataframe, timeperiod=14).tolist()
+        next_4_candles_rsi_change = [0.0] * len(rsi)
+        for i in range(0, len(rsi) - 4):
+            next_4_candles_rsi_change[i] = calculate_percentage_change(
+                start_value=rsi[i], final_value=rsi[i + 4]
+            )
+        dataframe["next_4_candles_rsi_change"] = next_4_candles_rsi_change
+
         dataframe["green_line"] = np.where(
             is_bull_engulf &
-            (dataframe["min_low_to_end"] >= bull_engulf_low),
+            (dataframe["min_low_to_end"] >= bull_engulf_low) &
+            (dataframe["next_4_candles_rsi_change"].shift(1).abs() > limit),
             open.shift(1),
             np.nan
         )
+
         dataframe["red_line"] = np.where(
             dataframe["green_line"].isnull(),
             np.nan,
