@@ -163,7 +163,8 @@ def add_indicators(fig, row, indicators: Dict[str, Dict], data: pd.DataFrame) ->
                     scatter.marker.size = 18
                     fig.add_trace(scatter, row, 1)
                 else:
-                    fig.add_trace(scatter, row, 1, True)
+                    #fig.add_trace(scatter, row, 1, True)
+                    fig.add_trace(scatter, row, 1, False)
             else:
                 fig.add_trace(scatter, row, 1)
         else:

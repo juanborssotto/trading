@@ -72,7 +72,7 @@ class DNSAlarm(IStrategy):
     stoploss = -0.99
 
     # Optimal timeframe for the strategy
-    timeframe = '5m'
+    timeframe = '1h'
 
     # -------
     # ALARM |
@@ -82,17 +82,16 @@ class DNSAlarm(IStrategy):
     max_simultaneous_engulf_patterns = 10
     BTC_ETH = ["BTC", "ETH"]
 
-    def __init__(self, config: dict) -> None:
-        self.btc_eth_alert_percentage = float(config['btc_eth_alert_percentage'])
-        self.altcoins_alert_percentage = float(config['altcoins_alert_percentage'])
-        self.btc_eth_restart_alert_percentage = float(config['btc_eth_restart_alert_percentage'])
-        self.altcoins_restart_alert_percentage = float(config['altcoins_restart_alert_percentage'])
-        self.count = 0
-        super().__init__(config)
+    # def __init__(self, config: dict) -> None:
+    #     self.btc_eth_alert_percentage = float(config['btc_eth_alert_percentage'])
+    #     self.altcoins_alert_percentage = float(config['altcoins_alert_percentage'])
+    #     self.btc_eth_restart_alert_percentage = float(config['btc_eth_restart_alert_percentage'])
+    #     self.altcoins_restart_alert_percentage = float(config['altcoins_restart_alert_percentage'])
+    #     self.count = 0
+    #     super().__init__(config)
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata["pair"]
-
         if pair not in self.alarm_emitted:
             self.alarm_emitted[pair] = False
         short_df = dataframe.tail(self.max_bars_back)

@@ -5,7 +5,7 @@
     "altcoins_restart_alert_percentage": 1,
 
     "dry_run": true,
-    "dry_run_wallet": 1000,
+    "dry_run_wallet": 25000,
     "stake_currency": "USDT",
     "tradable_balance_ratio": 0.99,
     "stake_amount": "unlimited",
@@ -27,7 +27,7 @@
     },
 
     "bid_strategy": {
-        "price_side": "bid",
+        "price_side": "ask",
         "use_order_book": false,
         "ask_last_balance": 0.0,
         "order_book_top": 1,
@@ -37,7 +37,7 @@
         }
     },
     "ask_strategy":{
-        "price_side": "ask",
+        "price_side": "bid",
         "use_order_book": false,
         "order_book_min": 1,
         "order_book_max": 1,
@@ -47,8 +47,8 @@
         "ignore_roi_if_buy_signal": false
     },
     "order_types": {
-        "buy": "limit",
-        "sell": "limit",
+        "buy": "market",
+        "sell": "market",
         "emergencysell": "market",
         "stoploss": "market",
         "stoploss_on_exchange": false,
@@ -70,7 +70,7 @@
             "enableRateLimit": true,
             "rateLimit": 200
         },
-        "pair_whitelist": ["ETH/USDT", "BNB/USDT", "AXS/USDT", "DOGE/USDT", "XRP/USDT", "DOT/USDT", "THETA/USDT", "SAND/USDT", "SOL/USDT", "CHZ/USDT", "AAVE/USDT", "LINK/USDT", "BAKE/USDT", "ALICE/USDT", "ETC/USDT", "ENJ/USDT", "MANA/USDT", "LUNA/USDT", "LTC/USDT", "VET/USDT", "ICP/USDT"] ,
+        "pair_whitelist": ["ETH/USDT"],
         "pair_blacklist": [".*UP/USDT", ".*DOWN/USDT",  "BUSD/USDT", "USDC/USDT",  "EUR/USDT"]
     },
     "max_open_trades": 0,
@@ -110,8 +110,8 @@
         "enable_openapi": true,
         "jwt_secret_key": "",
         "CORS_origins": [],
-        "username": "nqnbot",
-        "password": "NQNb0t_!"
+        "username": "admin",
+        "password": "admin"
     },
     "bot_name": "nqnbot",
     "db_url": "sqlite:///dnsalarm.sqlite",

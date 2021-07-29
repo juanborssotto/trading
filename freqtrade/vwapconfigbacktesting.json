@@ -22,7 +22,7 @@
     },
 
     "bid_strategy": {
-        "price_side": "ask",
+        "price_side": "bid",
         "use_order_book": false,
         "ask_last_balance": 0.0,
         "order_book_top": 1,
@@ -32,7 +32,7 @@
         }
     },
     "ask_strategy":{
-        "price_side": "bid",
+        "price_side": "ask",
         "use_order_book": false,
         "order_book_min": 1,
         "order_book_max": 1,
@@ -42,8 +42,8 @@
         "ignore_roi_if_buy_signal": false
     },
     "order_types": {
-        "buy": "market",
-        "sell": "market",
+        "buy": "limit",
+        "sell": "limit",
         "emergencysell": "market",
         "stoploss": "market",
         "stoploss_on_exchange": false,
@@ -65,7 +65,7 @@
             "enableRateLimit": true,
             "rateLimit": 200
         },
-        "pair_whitelist": ["ETH/USDT","AXS/USDT","BNB/USDT","XRP/USDT","DOGE/USDT","LUNA/USDT","ADA/USDT","EOS/USDT","DOT/USDT","ALICE/USDT","SOL/USDT","TLM/USDT","MATIC/USDT","CHZ/USDT","SAND/USDT","SNX/USDT","AAVE/USDT","LINK/USDT","ENJ/USDT","THETA/USDT","LTC/USDT","ATOM/USDT","ICP/USDT","MANA/USDT","CAKE/USDT"],
+        "pair_whitelist": ["ETH/USDT"],
         "pair_blacklist": [".*UP/USDT", ".*DOWN/USDT",  "BUSD/USDT", "USDC/USDT",  "EUR/USDT"]
     },
     "max_open_trades": -1,

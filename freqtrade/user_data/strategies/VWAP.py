@@ -6,10 +6,18 @@ import os
 
 import numpy as np
 
+import talib.abstract as ta
+
 from freqtrade.rpc import RPCMessageType
 from beepy import beep
 import freqtrade.vendor.qtpylib.indicators as qtpylib
 from technical.util import resample_to_interval
+
+from colorama import Fore, Style
+
+from freqtrade.utils.binance_rest_api import get_candles
+from freqtrade.utils.notifications import notify_critical
+from freqtrade.utils.tradingview import generate_tv_url
 
 
 def calculate_distance_percentage(current_price: float, green_line_price: float) -> float:
@@ -17,87 +25,114 @@ def calculate_distance_percentage(current_price: float, green_line_price: float)
     return distance * 100 / current_price
 
 
+def calculate_percentage_change(start_value: float, final_value: float) -> float:
+    if final_value == 0:
+        return 0
+    return (final_value - start_value) / start_value * 100
+
+
 def get_symbol_from_pair(pair: str) -> str:
     return pair.split('/')[0]
 
 
+def yellow_text(text):
+    return f"{Fore.YELLOW}{text}{Style.RESET_ALL}"
+
+
 class VWAP(IStrategy):
     minimal_roi = {
-        "0": 10
+        "0": 0.05
     }
 
     # Optimal stoploss designed for the strategy
-    stoploss = -0.99
+    stoploss = -0.01
 
     # Optimal timeframe for the strategy
-    timeframe = '3m'
-    process_only_new_candles = True
+    timeframe = '1h'
 
-    alarm_emitted = dict()
+    ###########################################################################################
+    ###########################################################################################
+    ###########################################################################################
+    process_only_new_candles = True
+    ###########################################################################################
+    ###########################################################################################
+    ###########################################################################################
+
+    bought_at = dict()
+    btc_rsi = None
+    btc_macd_hist = None
+
+    def informative_pairs(self):
+        return [("BTC/USDT", "1h"),
+                ]
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         pair = metadata["pair"]
-        if pair not in self.alarm_emitted:
-            self.alarm_emitted[pair] = False
-        # ticker = self.dp.ticker(pair)
-        # ongoing_close = ticker['last']
-        # ongoing_volume = float(ticker["info"]["volume"]) - float(dataframe["volume"].rolling(23).sum().iloc[-1])
+        if self.dp and \
+                self.dp.runmode.value in ('live', 'dry_run'):
+            if pair not in self.bought_at:
+                self.bought_at[pair] = None
+            if pair == "ETH/USDT":
+                btc_df = get_candles(pair="BTC/USDT", timeframe=self.timeframe)
+                self.btc_macd_hist = ta.MACD(btc_df)["macdhist"].tolist()
+                # self.btc_rsi = ta.RSI(btc_df, timeperiod=14).tolist()
 
-        df_2h = resample_to_interval(dataframe, 120)
-        df_2h['vwap'] = qtpylib.rolling_vwap(df_2h, window=14)
+            vwap = qtpylib.rolling_vwap(dataframe, window=14).tolist()
+            last_closed_candle_open = dataframe["open"].iloc[-1]
+            last_closed_candle_close = dataframe["close"].iloc[-1]
+            last_closed_candle_vwap = vwap[-1]
 
-        # ongoing_candle = Series({
-        #     'volume': ongoing_volume,
-        #     'close': ongoing_close
-        # })
-        # df_2h = df_2h.append(ongoing_candle, ignore_index=True)
+            buy_criteria, sell_criteria = False, False
 
-        def calculate_distance_percentage(current_price: float, green_line_price: float) -> float:
-            distance = abs(current_price - green_line_price)
-            return distance * 100 / current_price
+            if not self.bought_at[pair] and \
+                    last_closed_candle_open < last_closed_candle_vwap < last_closed_candle_close and \
+                    self.btc_macd_hist[-1] > self.btc_macd_hist[-2]:
+                    # self.btc_rsi[-1] > self.btc_rsi[-2]:
+                    # self.btc_rsi[-3] > self.btc_rsi[-2] < self.btc_rsi[-1]:
+                buy_criteria = True
+                self.bought_at[pair] = self.dp.ticker(pair)["last"]
+            if self.bought_at[pair] and \
+                    last_closed_candle_close < last_closed_candle_vwap < last_closed_candle_open:
+                sell_criteria = True
+                sold_at = self.dp.ticker(pair)["last"]
+                profit = calculate_percentage_change(self.bought_at[pair], sold_at)
+                msg = f"Sold {pair} at {self.timeframe} profit: {profit}"
+                notify_critical(msg)
+                print(yellow_text(generate_tv_url(pair, self.timeframe)))
+                self.bought_at[pair] = None
 
-        # ----------------------------------------------------------------
-        # Price is x pct above vwap and previous candle closed above vwap|
-        # ----------------------------------------------------------------
-        pct = 1.0
-        vwap = df_2h["vwap"].iloc[-1]
-        price = df_2h["close"].iloc[-1]
-        previous_vwap = df_2h["vwap"].iloc[-2]
-        # previous_price = df_2h["close"].iloc[-2]
-        previous_low = df_2h["low"].iloc[-2]
-        # if previous_price > previous_vwap and (vwap + (vwap * pct / 100)) >= price >= vwap:
-        if previous_low > previous_vwap and (vwap + (vwap * pct / 100)) >= price >= vwap:
-            if not self.alarm_emitted[pair]:
-                binance_pair = pair.replace("/", "_")
-                beep(1)
-                os.system(f'xdg-open https://www.binance.com/en/trade/{binance_pair}?layout=pro&type=spot')
-                print(f'{pair} {calculate_distance_percentage(price, vwap)}')
-            self.alarm_emitted[pair] = True
+            dataframe["buy_criteria"] = buy_criteria
+            dataframe["sell_criteria"] = sell_criteria
         else:
-            self.alarm_emitted[pair] = False
+            btc_df = self.dp.get_pair_dataframe(pair="BTC/USDT",
+                                                     timeframe="1h")
+            dataframe["btc_macd_hist"] = ta.MACD(btc_df)["macdhist"]
+            dataframe["btc_rsi"] = ta.RSI(btc_df, timeperiod=14)
+            dataframe["vwap"] = qtpylib.rolling_vwap(dataframe, window=14)
 
-        # -------------------
-        # Price breaks vwap |
-        # -------------------
-        # if df_2h["close"].iloc[-1] > df_2h["vwap"].iloc[-1]:
-        #     if not self.alarm_emitted[pair]:
-        #         binance_pair = pair.replace("/", "_")
-        #         beep(1)
-        #         os.system(f'xdg-open https://www.binance.com/en/trade/{binance_pair}?layout=pro&type=spot')
-        #     self.alarm_emitted[pair] = True
-        # else:
-        #     self.alarm_emitted[pair] = False
+            dataframe["buy_criteria"] = (
+                    (dataframe["open"] < dataframe["vwap"]) &
+                    (dataframe["vwap"] < dataframe["close"]) &
+                    (dataframe["btc_macd_hist"] > dataframe["btc_macd_hist"].shift(1)) &
+                    (dataframe["btc_rsi"] > dataframe["btc_rsi"].shift(1))
+            )
+            # dataframe["sell_criteria"] = (
+            #         (dataframe["close"] < dataframe["vwap"]) &
+            #         (dataframe["vwap"] < dataframe["open"])
+            # )
         return dataframe
 
     def populate_buy_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (
+                dataframe["buy_criteria"]
             ), 'buy'] = 1
         return dataframe
 
     def populate_sell_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (
+                dataframe["sell_criteria"]
             ),
             'sell'] = 1
         return dataframe

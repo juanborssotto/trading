@@ -26,7 +26,7 @@ def get_symbol_from_pair(pair: str) -> str:
     return pair.split('/')[0]
 
 
-class VWAP5M(IStrategy):
+class VWAPAlarm5M(IStrategy):
     minimal_roi = {
         "0": 10
     }
