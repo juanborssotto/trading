@@ -4,11 +4,10 @@ import numpy as np
 from colorama import Fore, Style
 import time
 import os
+import sys
 from freqtrade.utils.binance_rest_api import get_candles
 
-coins = [
-    "XRP", "ETC", "BCH", "DOGE", "ADA", "LTC", "BNB", "EOS", "DOT", "LINK", "MATIC", "TRX", "VET", "XLM",
-]
+coins = sys.argv[1:]
 
 timeframes = ["4h", "1h", "15m"]
 

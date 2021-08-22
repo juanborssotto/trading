@@ -2,6 +2,7 @@ import talib.abstract as ta
 from colorama import Fore, Style
 import time
 import os
+import sys
 
 from freqtrade.utils.binance_rest_api import get_candles
 
@@ -28,7 +29,7 @@ config = {
     "ADA": 140,
     "ETC": 160,
     "DOGE": 200,
-    "XRP": 100,
+    "XRP": 50,
 }
 
 timeframe = "1h"
@@ -42,6 +43,8 @@ while True:
         if increase_pct < 2:
             msg = f"{pair} ema {ema_length}"
             print(msg)
-            os.system(
-                f"notify-send \"{msg}\"  --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
+            if len(sys.argv) > 1:
+                os.system(
+                    f"notify-send \"{msg}\"  --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
     time.sleep(300)
+    print("")

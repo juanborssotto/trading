@@ -9,6 +9,7 @@ import numpy as np
 from freqtrade.rpc import RPCMessageType
 
 import freqtrade.vendor.qtpylib.indicators as qtpylib
+import os
 
 
 # --------------------------------
@@ -48,10 +49,10 @@ class SpringAlarm(IStrategy):
             ongoing_df = self.build_ongoing_dataframe(dataframe, pair)
             if self.should_run_alarm(ongoing_df):
                 self.alarm_emitted[pair] = True
-                self.rpc.send_msg({
-                    'type': RPCMessageType.STATUS,
-                    'status': f"Patrón de Spring detectado en {metadata['pair']} con fecha {(datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M')} ARG"
-                })
+                msg = f"Spring en {metadata['pair']} en {self.timeframe} con fecha {(datetime.utcnow() - timedelta(hours=3)).strftime('%d/%m/%Y %H:%M')}"
+                print(msg)
+                os.system(
+                    f"notify-send \"{msg.upper()}\" --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
 
         return dataframe
 
