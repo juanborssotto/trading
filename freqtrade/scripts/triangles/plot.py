@@ -134,8 +134,8 @@ def get_x_and_y_high(df, line, loopback):
     return x, y
 
 def main():
-    timeframe = "1d"
-    default_loopback = 20
+    timeframe = "1h"
+    default_loopback = 30
     pairs = sys.argv[1:]
     for pair in pairs:
         df = get_candles(pair+"/USDT", timeframe)
@@ -148,7 +148,7 @@ def main():
 
             df = df.tail(50)
             fig = go.Figure()
-            fig.update_layout(title=pair)
+            fig.update_layout(title=pair+" "+timeframe)
             fig.add_trace(go.Candlestick(x=df['date'],
                             open=df['open'],
                             high=df['high'],
