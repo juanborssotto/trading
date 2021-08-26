@@ -4,7 +4,8 @@ import dash_core_components as dcc
 from dash.dependencies import Input, Output, State
 import os
 from binance import Client
-
+import time
+import math
 
 from numpy import ones,vstack
 from typing import List
@@ -23,6 +24,9 @@ def get_func(x1, y1, x2, y2):
     A = vstack([x_coords,ones(len(x_coords))]).T
     m, c = lstsq(A, y_coords, rcond=None)[0]
     return m, c
+
+def get_increase(start, final):
+    return (final - start) / start * 100
 
 # next_point = m * 20 + c
 
@@ -153,8 +157,10 @@ def build_tab(tab_name, fig):
     ])
 
 old_msgs = []
-banned_pairs = []
+allowed_pairs = []
 notif_status = "" #  empty(both), low, high, no
+lines_option = "" #  empty(both), low, high
+interval = 30
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -164,10 +170,14 @@ def update_metrics(n):
     tabs = []
     timeframe = sys.argv[1]
     default_loopback = 25
-    global banned_pairs
+    global allowed_pairs
+    global lines_option
     pairs = []
     for pair in sys.argv[2:]:
-        if pair.upper() not in banned_pairs:
+        if allowed_pairs:
+            if pair.upper() in allowed_pairs:
+                pairs.append(pair.upper())
+        else:
             pairs.append(pair.upper())
     new_msgs = []
     for pair in pairs:
@@ -177,8 +187,9 @@ def update_metrics(n):
         else:
             loopback = default_loopback
         best_clear_low_lines, best_clear_high_lines = get_lines(df, loopback)
-        if best_clear_low_lines and best_clear_high_lines:
-
+        if (not lines_option and (best_clear_low_lines and best_clear_high_lines)) or \
+            (lines_option and lines_option.upper() == "LOW" and best_clear_low_lines) or \
+            (lines_option and lines_option.upper() == "HIGH" and best_clear_high_lines):
             df = df.tail(40)
             fig = go.Figure()
             fig.update_layout(height=800)
@@ -187,13 +198,26 @@ def update_metrics(n):
                             high=df['high'],
                             low=df['low'],
                             close=df['close']))
- 
-            for line in best_clear_low_lines:
-                x, y = get_x_and_y_low(df, line, loopback)
-                fig.add_trace(go.Scatter(x=x, y=y))
-            for line in best_clear_high_lines:
-                x, y = get_x_and_y_high(df, line, loopback)
-                fig.add_trace(go.Scatter(x=x, y=y))
+            if not lines_option or (lines_option and lines_option.upper() != "HIGH" and best_clear_low_lines):
+                for line in best_clear_low_lines:
+                    x, y = get_x_and_y_low(df, line, loopback)
+                    fig.add_trace(go.Scatter(x=x, y=y))
+                    increase_pct = get_increase(y[-1], df["close"].iloc[-1], )
+                    fig.add_annotation(x=x[-1], y=y[-1],
+                        text=round(increase_pct, 2),
+                        showarrow=False,
+                        xshift=10,
+                        yshift=-10)
+            if not lines_option or (lines_option and lines_option.upper() != "LOW" and best_clear_high_lines):
+                for line in best_clear_high_lines:
+                    x, y = get_x_and_y_high(df, line, loopback)
+                    fig.add_trace(go.Scatter(x=x, y=y))
+                    increase_pct = get_increase(df["close"].iloc[-1], y[-1])
+                    fig.add_annotation(x=x[-1], y=y[-1],
+                        text=round(increase_pct, 2),
+                        showarrow=False,
+                        xshift=10,
+                        yshift=10)
             tabs.append(build_tab(pair, fig))
 
             # alarms
@@ -205,27 +229,42 @@ def update_metrics(n):
                         m, c = line[2], line[3]
                         line_price = m * loopback + c
                         increase_pct = (current_price - line_price) / line_price * 100
-                        if increase_pct <= 1:
-                            new_msgs.append(f"{pair} close to {line_price}")
-                        if increase_pct <= 0.3:
-                            new_msgs.append(f"{pair} SUPER CLOSE to {line_price}")
+                        #if increase_pct <= 1:
+                        #    new_msgs.append(f"{pair} {timeframe} #LOW {increase_pct}")
+                        if increase_pct <= 0.4:
+                            new_msgs.append(f".{pair} {timeframe} #LOW {increase_pct}")
                 if notif_status != "low":
                     for line in best_clear_high_lines:
                         m, c = line[2], line[3]
                         line_price = m * loopback + c
                         increase_pct = (line_price - current_price) / current_price * 100
-                        if increase_pct <= 1:
-                            new_msgs.append(f"{pair} close to {line_price}")
-                        if increase_pct <= 0.3:
-                            new_msgs.append(f"{pair} SUPER CLOSE to {line_price}")
+                        #if increase_pct <= 1:
+                        #    new_msgs.append(f"{pair} {timeframe} #HIGH {increase_pct}")
+                        if increase_pct <= 0.4:
+                            new_msgs.append(f".{pair} {timeframe} #HIGH {increase_pct}")
     global old_msgs
     for msg in new_msgs:
-        if msg not in old_msgs:
+        nm_ = msg.split("#")[0]
+        old_msgs_ = [msg.split("#")[0] for msg in old_msgs]
+        if nm_ not in old_msgs_:
             os.system(
                 f"notify-send \"{msg}\"  --urgency critical -i /usr/share/icons/gnome/48x48/actions/stock_about.png")
             print(msg)
     old_msgs = new_msgs
     return tabs
+
+def get_stoploss_and_qty(client, pair, qty, stoploss, stoploss_trigger):
+    ticks = {}
+    for filt in client.get_symbol_info(pair+'USDT')['filters']:
+        if filt['filterType'] == 'PRICE_FILTER':
+            ticks['price_step_size'] = filt['tickSize'].find('1') - 1
+        if filt['filterType'] == 'LOT_SIZE':
+            ticks['lot_step_size'] = filt['stepSize'].find('1') - 1
+
+    order_stoploss = math.floor(stoploss * 10**ticks['price_step_size']) / float(10**ticks['price_step_size'])
+    order_stoploss_trigger = math.floor(stoploss_trigger * 10**ticks['price_step_size']) / float(10**ticks['price_step_size'])
+    order_quantity = math.floor(qty * 10**ticks['lot_step_size']) / float(10**ticks['lot_step_size'])
+    return order_stoploss, order_stoploss_trigger, order_quantity
 
 def market_buy_and_set_stop_limit(pair, usdt_to_spend, stoploss_pct):
     api_key = os.getenv('BINANCE_TRADE_API_KEY')
@@ -237,6 +276,7 @@ def market_buy_and_set_stop_limit(pair, usdt_to_spend, stoploss_pct):
         market_buy_result = client.order_market_buy(
             symbol=pair+'USDT',
             quoteOrderQty=usdt_to_spend)
+        print("Market buy result: ", market_buy_result)
     
         avg_buy_price = None
         acum_price = 0
@@ -247,31 +287,36 @@ def market_buy_and_set_stop_limit(pair, usdt_to_spend, stoploss_pct):
             acum_price += float(f['price'])
             acum_qty += float(f['qty'])
             acum_commission += float(f['commission'])
+
         avg_buy_price = acum_price / len(order_fills)
         full_qty = acum_qty - acum_commission
-    
-        def my_round(n: str, n_decimals: int):
-            if '.' not in n:
-                return n
-            s = n.split('.')
-            whole = s[0]
-            decimals = s[1]
-            decimals = decimals[:n_decimals]
-            return f"{whole}.{decimals}"
-    
         stoploss = abs((stoploss_pct / 100) * avg_buy_price - avg_buy_price)
         stoploss_trigger = (0.05 / 100 * stoploss) + stoploss
+
+        print("avg buy price ", avg_buy_price)
+        print("full qty ", full_qty)
+        print("stoploss ", stoploss)
+        print("stoploss trigger ", stoploss_trigger)
+
+        order_stoploss, order_stoploss_trigger, order_quantity = get_stoploss_and_qty(
+            client, pair, full_qty, stoploss, stoploss_trigger
+        )
+        print("order_quantity ", order_quantity)
+        print("order_stoploss ", order_stoploss)
+        print("order_stoploss_trigger ", order_stoploss_trigger)
+
         stop_limit_result = client.create_order(
             symbol=pair+'USDT',
             side='SELL',
             type='STOP_LOSS_LIMIT',
             timeInForce='GTC',
-            quantity=my_round(str(full_qty), 6),
-            price=my_round(str(stoploss), 2),
-            stopPrice=my_round(str(stoploss_trigger), 2))
+            quantity=str(order_quantity),
+            price=str(order_stoploss),
+            stopPrice=str(order_stoploss_trigger))
+        print("Stoploss limit result: ", stop_limit_result)
         
-        print("Market buy filled successfully: ", market_buy_result)
-        print("Stoploss limit filled successfully: ", stop_limit_result)
+        print("Market buy filled successfully")
+        print("Stoploss limit filled successfully")
         print(f"avg-buy: {avg_buy_price} qty: {full_qty} stoploss-trigger: {stoploss_trigger} stoploss: {stoploss}")
     except Exception as exception:
         print(f"exception ocurred: {exception}")
@@ -295,46 +340,114 @@ def buy_button_clicked(btn, selected_tab, input_optional_pair, input_usdt, input
     return []
 
 @app.callback(
-    Output('input-banned-pairs-div', 'children'), 
-    Input('input-banned-pairs', 'value'))
+    Output('input-allowed-pairs-div', 'children'), 
+    Input('input-allowed-pairs', 'value'))
 def buy_button_clicked(input_value):
     if not input_value:
         return []
-    global banned_pairs
-    banned_pairs = []
-    for pair in input_value.split(","):
-        banned_pairs.append(pair.upper())
-    if len(banned_pairs) == 1 and len(banned_pairs[0]) == 1:
-        banned_pairs = []
+    global allowed_pairs
+    allowed_pairs = []
+    for pair in input_value.split(" "):
+        allowed_pairs.append(pair.upper())
+    if len(allowed_pairs) == 1 and len(allowed_pairs[0]) == 1:
+        allowed_pairs = []
     return []
 
 @app.callback(
     Output('input-notifications-status-div', 'children'), 
     Input('input-notifications-status', 'value'))
 def buy_button_clicked(input_value):
-    if not input_value:
-        return []
     global notif_status
-    if len(input_value) == 1:
-        notif_status = ""
-    else:
-        notif_status = input_value.lower()
-        if notif_status == "no":
-            global old_msgs
-            old_msgs = []
+    notif_status = input_value.lower()
+    if notif_status == "no":
+        global old_msgs
+        old_msgs = []
+    print(notif_status)
     return []
+
+@app.callback(
+    Output("interval-component", "interval"),
+    [Input("input-refresh-secs", "value")]
+)
+def update_interval(value):
+    default_value = 30*1000
+    new_interval = default_value
+    try:
+        v = int(value) * 1000
+        if v >= 2000:
+            new_interval = v
+        else:
+            new_interval = default_value
+    except Exception as exception:
+        pass
+        new_interval = default_value
+    global interval
+    interval = new_interval / 1000
+    return new_interval
+
+@app.callback(
+    Output('input-lines-option-div', 'children'), 
+    Input('input-lines-option', 'value'))
+def buy_button_clicked(input_value):
+    global lines_option
+    lines_option = input_value.lower()
+    return []
+
+allowed_pairs_before_fast_mode = []
+interval_before_fast_mode = None
+
+@app.callback(
+    Output("input-refresh-secs", "value"),
+    Input('check-fastmode', 'value'),
+    State('tabs', 'value'))
+def buy_button_clicked(check_value, pair):
+    global allowed_pairs
+    global allowed_pairs_before_fast_mode
+    global interval
+    global interval_before_fast_mode
+    if check_value:
+        allowed_pairs_before_fast_mode = allowed_pairs
+        interval_before_fast_mode = interval
+        allowed_pairs = [pair.split("-")[1]]
+        interval = 2
+    else:
+        allowed_pairs = allowed_pairs_before_fast_mode
+        interval = interval_before_fast_mode
+    return interval
 
 def main():
     app.layout = html.Div([
         html.Div(id='buy-btc-div'),
-        html.Div(id='input-banned-pairs-div'),
+        html.Div(id='input-allowed-pairs-div'),
         html.Div(id='input-notifications-status-div'),
+        html.Div(id='input-lines-option-div'),
         dcc.Input(id="input-optional-pair", type="text", placeholder="optional pair"),
         dcc.Input(id="input-usdt", type="text", placeholder="usdt"),
         dcc.Input(id="input-stoploss", type="text", placeholder="stoploss"),
         html.Button('Buy', id='buy-btn', n_clicks=0),
-        dcc.Input(id="input-banned-pairs", type="text", placeholder="Banned Pairs"),
-        dcc.Input(id="input-notifications-status", type="text", placeholder="Notif.(no,low,high)"),
+        dcc.Input(id="input-allowed-pairs", type="text", placeholder="Allowed Pairs"),
+        html.Span("Notif."),
+        dcc.Dropdown(id="input-notifications-status", 
+        options=[
+            {'label': 'All', 'value': ''}, 
+            {'label': 'No', 'value': 'no'}, 
+            {'label': 'Low', 'value': 'low'},
+            {'label': 'High', 'value': 'high'}], 
+            value='',
+            placeholder="Notif.",
+            style={'display': 'inline-block', 'width': 120}),
+        dcc.Input(id="input-refresh-secs", type="text", placeholder="Refresh secs", value="30"),
+        html.Span("LineMode"),
+        dcc.Dropdown(id="input-lines-option", options=[
+            {'label': 'Both', 'value': ''}, 
+            {'label': 'Low', 'value': 'low'}, 
+            {'label': 'High', 'value': 'high'}], 
+            value='',
+            placeholder="LineMode", 
+            style={'display': 'inline-block', 'width': 120}),
+        dcc.Checklist(id="check-fastmode", options=[
+            {'label': 'Fast', 'value': 'fast'}], 
+            style={'display': 'inline-block'}),
         dcc.Tabs(id="tabs"), 
         dcc.Interval(
             id='interval-component',
